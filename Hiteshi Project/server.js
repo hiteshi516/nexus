@@ -7,7 +7,10 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+// Prefer OS DNS by default. Some networks block public DNS and break Mongo SRV lookups.
+if (process.env.FORCE_PUBLIC_DNS === 'true') {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+}
 
 const app = express();
 
@@ -23,28 +26,21 @@ if (!mongoUri) {
   process.exit(1);
 }
 
-async function startServer() {
-  try {
-    console.log('Connecting to MongoDB...');
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 10000,
-    });
-    console.log('MongoDB Connected');
+mongoose.connect(mongoUri, {
+  serverSelectionTimeoutMS: 10000,
+}).then(() => console.log('MongoDB Connected'))
+  .catch(err => console.error('MongoDB connection failed:', err.message || err));
 
-    // Routes
-    app.use('/api/auth', require('./routes/auth'));
-    app.use('/api/topics', require('./routes/topics'));
-    app.use('/api/notes', require('./routes/notes'));
-    app.use('/api/comments', require('./routes/comments'));
-    app.use('/api/search', require('./routes/search'));
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/topics', require('./routes/topics'));
+app.use('/api/notes', require('./routes/notes'));
+app.use('/api/comments', require('./routes/comments'));
+app.use('/api/search', require('./routes/search'));
 
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
-  } catch (err) {
-    console.error('MongoDB connection failed:', err.message || err);
-    console.error(err);
-    process.exit(1);
-  }
+const PORT = process.env.PORT || 5000;
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
 }
 
-startServer();
+module.exports = app;
