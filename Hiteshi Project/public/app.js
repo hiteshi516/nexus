@@ -11,6 +11,16 @@ const state = {
 
 let googleClientIdPromise = null;
 let pendingVerificationEmail = localStorage.getItem('pendingVerificationEmail') || '';
+const GOOGLE_DEBUG = true; // Temporary diagnostics; remove after confirmation.
+
+function googleDebug(step, details = {}) {
+  if (!GOOGLE_DEBUG) return;
+  try {
+    console.log('[GoogleAuthDebug]', step, details);
+  } catch (_) {
+    // no-op
+  }
+}
 
 function showToast(message, isError = false) {
   const container = document.getElementById('toast-container');
@@ -33,16 +43,25 @@ async function apiCall(endpoint, method = 'GET', body = null) {
   const options = { method, headers, body };
   if (!body) delete options.body;
 
-  const res = await fetch(`${API_URL}${endpoint}`, options);
+  let res;
+  try {
+    res = await fetch(`${API_URL}${endpoint}`, options);
+  } catch (networkErr) {
+    throw new Error(`Network error while calling ${endpoint}. Check backend/server connection.`);
+  }
   const contentType = res.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
   const data = isJson ? await res.json() : await res.text();
 
   if (!res.ok) {
     if (isJson && data && data.msg) throw new Error(data.msg);
-    throw new Error(typeof data === 'string' && data.trim().startsWith('<')
-      ? 'Server returned an HTML page instead of API JSON. Please restart the backend and open the app from the same server origin.'
-      : 'API Error');
+    if (typeof data === 'string' && data.trim().startsWith('<')) {
+      throw new Error(`Server returned HTML instead of JSON for ${endpoint}. Open app from backend origin and restart server.`);
+    }
+
+    const text = typeof data === 'string' ? data.trim() : '';
+    const snippet = text ? ` - ${text.slice(0, 120)}` : '';
+    throw new Error(`API Error (${res.status}) on ${endpoint}${snippet}`);
   }
 
   if (!isJson) {
@@ -71,47 +90,69 @@ function clearPendingVerificationEmail() {
 }
 
 async function getGoogleClientId() {
+  googleDebug('getGoogleClientId:start', { hasPromise: !!googleClientIdPromise });
   if (!googleClientIdPromise) {
     googleClientIdPromise = apiCall('/auth/google-config')
-      .then((data) => data.clientId || '')
-      .catch(() => '');
+      .then((data) => {
+        const clientId = data.clientId || '';
+        googleDebug('getGoogleClientId:success', { hasClientId: !!clientId, clientIdPreview: clientId ? `${clientId.slice(0, 12)}...` : '' });
+        return clientId;
+      })
+      .catch((err) => {
+        googleDebug('getGoogleClientId:error', { message: err.message });
+        return '';
+      });
   }
   return googleClientIdPromise;
 }
 
 async function renderGoogleButton(containerId, mode) {
   const container = document.getElementById(containerId);
+  googleDebug('renderGoogleButton:container', { containerId, mode, found: !!container });
   if (!container) return;
 
   const clientId = await getGoogleClientId();
+  googleDebug('renderGoogleButton:clientId', { hasClientId: !!clientId });
   if (!clientId) {
     container.innerHTML = '<p class="google-auth-note">Google sign-in is not configured yet.</p>';
+    googleDebug('renderGoogleButton:missingClientId');
     return;
   }
 
+  googleDebug('renderGoogleButton:gsiAvailability', {
+    hasGoogle: !!window.google,
+    hasAccounts: !!(window.google && window.google.accounts),
+    hasId: !!(window.google && window.google.accounts && window.google.accounts.id)
+  });
   if (!window.google || !window.google.accounts || !window.google.accounts.id) {
     container.innerHTML = '<p class="google-auth-note">Google sign-in is loading. Please wait a moment.</p>';
+    googleDebug('renderGoogleButton:gsiNotReady');
     return;
   }
 
+  googleDebug('renderGoogleButton:initialize:start', { mode });
   window.google.accounts.id.initialize({
     client_id: clientId,
     auto_select: false,
     callback: async (response) => {
+      googleDebug('renderGoogleButton:callback', { hasCredential: !!(response && response.credential) });
       try {
         const data = await apiCall('/auth/google', 'POST', {
           credential: response.credential
         });
         persistAuth(data);
         showToast('Signed in with Google');
+        googleDebug('renderGoogleButton:signinSuccess', { userId: data && data.user ? data.user.id : null });
         window.location.hash = '#/';
       } catch (err) {
+        googleDebug('renderGoogleButton:signinError', { message: err.message });
         showToast(err.message, true);
       }
     }
   });
 
   container.innerHTML = '';
+  googleDebug('renderGoogleButton:render:start', { width: Math.min(container.offsetWidth || 320, 360), mode });
   window.google.accounts.id.renderButton(container, {
     theme: 'outline',
     size: 'large',
@@ -119,6 +160,7 @@ async function renderGoogleButton(containerId, mode) {
     width: Math.min(container.offsetWidth || 320, 360),
     text: mode === 'register' ? 'signup_with' : 'signin_with'
   });
+  googleDebug('renderGoogleButton:render:done');
 }
 
 function navigate() {
@@ -297,6 +339,10 @@ function renderLogin(app) {
       window.location.hash = '#/';
     } catch (err) {
       showToast(err.message, true);
+      if (err.message.includes('verify your email')) {
+        setPendingVerificationEmail(e.target.email.value);
+        setTimeout(() => window.location.hash = '#/verify-otp', 1500);
+      }
     }
   });
 

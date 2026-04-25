@@ -19,8 +19,8 @@ function getMailTransporter() {
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.SMTP_EMAIL,
-      pass: process.env.SMTP_APP_PASSWORD
+      user: process.env.SMTP_EMAIL.trim(),
+      pass: process.env.SMTP_APP_PASSWORD.trim()
     }
   });
 }
@@ -168,7 +168,7 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/google-config', (req, res) => {
-  res.json({ clientId: process.env.GOOGLE_CLIENT_ID || '' });
+  res.json({ clientId: process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.trim() : '' });
 });
 
 router.post('/google', async (req, res) => {
@@ -185,7 +185,7 @@ router.post('/google', async (req, res) => {
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID
+      audience: process.env.GOOGLE_CLIENT_ID.trim()
     });
 
     const payload = ticket.getPayload();
@@ -216,6 +216,7 @@ router.post('/google', async (req, res) => {
     await user.save();
     sendAuthResponse(user, res);
   } catch (err) {
+    console.error('Google Auth Error:', err);
     res.status(500).json({ msg: err.message || 'Google sign-in failed' });
   }
 });
