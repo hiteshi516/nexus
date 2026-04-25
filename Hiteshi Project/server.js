@@ -26,10 +26,25 @@ if (!mongoUri) {
   process.exit(1);
 }
 
-mongoose.connect(mongoUri, {
-  serverSelectionTimeoutMS: 10000,
-}).then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error('MongoDB connection failed:', err.message || err));
+let isConnected = false;
+const connectDB = async () => {
+  if (isConnected) return;
+  try {
+    const db = await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+    });
+    isConnected = db.connections[0].readyState;
+    console.log('MongoDB Connected (Serverless)');
+  } catch (err) {
+    console.error('MongoDB connection failed:', err.message || err);
+  }
+};
+
+// Ensure DB is connected before handling any API routes
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
