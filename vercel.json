@@ -1,15 +1,16 @@
 {
+  "name": "nexus-research-hub",
   "version": 2,
   "builds": [
     {
-      "src": "server.js",
+      "src": "Hiteshi Project/server.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "server.js"
+      "dest": "Hiteshi Project/server.js"
     }
   ]
 }
