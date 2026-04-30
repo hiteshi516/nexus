@@ -252,35 +252,20 @@ router.post('/google', async (req, res) => {
         email: normalizedEmail,
         googleId: payload.sub,
         authProvider: 'google',
-        isEmailVerified: !isEmailVerificationRequired(),
+        isEmailVerified: true,
         profilePic: payload.picture || ''
       });
-      
-      if (isEmailVerificationRequired()) {
-        await issueVerificationOtp(user);
-        return res.json({ msg: 'Verification OTP sent to your email', requiresOtp: true, email: user.email });
-      }
-      
-      await user.save();
     } else {
       user.googleId = user.googleId || payload.sub;
       user.authProvider = user.authProvider === 'local' && user.password ? 'local' : 'google';
+      user.isEmailVerified = true;
+      user.emailOtp = null;
+      user.emailOtpExpiresAt = null;
       if (!user.profilePic && payload.picture) user.profilePic = payload.picture;
       if (!user.name && payload.name) user.name = payload.name;
-      
-      if (!user.isEmailVerified && isEmailVerificationRequired()) {
-        await issueVerificationOtp(user);
-        return res.json({ msg: 'Verification OTP sent to your email', requiresOtp: true, email: user.email });
-      }
-      
-      if (!isEmailVerificationRequired() && !user.isEmailVerified) {
-          user.isEmailVerified = true;
-          user.emailOtp = null;
-          user.emailOtpExpiresAt = null;
-      }
-      await user.save();
     }
 
+    await user.save();
     sendAuthResponse(user, res);
   } catch (err) {
     console.error('Google Auth Error:', err);
