@@ -53,7 +53,7 @@ Nexus is built using a modern, robust, and scalable tech stack:
 The project is organized to cleanly separate the frontend client, backend API routes, database models, and server configuration:
 
 ```text
-nexus/
+Hiteshi Project/
 ├── README.md                 # Project documentation
 └── Hiteshi Project/          # Main application source folder
     ├── public/               # Frontend Assets (HTML, CSS, Vanilla JS)
