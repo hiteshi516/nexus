@@ -48,6 +48,34 @@ Nexus is built using a modern, robust, and scalable tech stack:
 
 ---
 
+## 📁 File Structure
+
+The project is organized to cleanly separate the frontend client, backend API routes, database models, and server configuration:
+
+```text
+nexus/
+├── README.md                 # Project documentation
+└── Hiteshi Project/          # Main application source folder
+    ├── public/               # Frontend Assets (HTML, CSS, Vanilla JS)
+    │   ├── index.html        # Main landing and authentication page
+    │   ├── app.js            # Frontend logic and DOM manipulation
+    │   └── style.css         # Vanilla CSS stylesheets
+    ├── models/               # MongoDB Mongoose Schemas (Data Layer)
+    │   ├── User.js           # User schema
+    │   └── Topic.js          # Topic, Notes, and Comments schema
+    ├── routes/               # Express.js API Routes (Controller Layer)
+    │   ├── auth.js           # Authentication API endpoints (Login, Register, OTP, Google OAuth)
+    │   └── api.js            # Core application endpoints (Topics, Notes, Uploads, Search)
+    ├── middleware/           # Express Middleware
+    │   └── auth.js           # JWT verification middleware to protect private routes
+    ├── uploads/              # Local directory for user-uploaded research files
+    ├── server.js             # Express Server entry point and backend setup
+    ├── package.json          # Node.js dependencies and scripts
+    └── vercel.json           # Vercel deployment configuration
+```
+
+---
+
 ## ⚙️ Setup and Local Development
 
 Follow these steps to get a local copy of Nexus up and running on your machine.
