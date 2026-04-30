@@ -131,4 +131,4 @@ The server will typically start on `http://localhost:5000`. You can then open yo
 ---
 
 ## 🌐 Live Demo
-[https://nexus-research-hub.vercel.app](https://nexus-research-hub.vercel.app)
+[https://nexus-research-odlpf8sib-hiteshi516s-projects.vercel.app](https://nexus-research-odlpf8sib-hiteshi516s-projects.vercel.app)
