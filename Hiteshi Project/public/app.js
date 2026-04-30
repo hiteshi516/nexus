@@ -411,20 +411,9 @@ function renderRegister(app) {
         email: e.target.email.value,
         password: e.target.password.value
       });
-      if (data && data.token) {
-        persistAuth(data);
-        showToast('Account created successfully');
-        window.location.hash = '#/';
-        return;
-      }
-
       setPendingVerificationEmail(data.email || e.target.email.value);
       showToast(data.msg || 'OTP sent to your email');
-      if (data.requiresOtp) {
-        window.location.hash = '#/verify-otp';
-      } else {
-        window.location.hash = '#/login';
-      }
+      window.location.hash = '#/verify-otp';
     } catch (err) {
       showToast(err.message, true);
     }
@@ -733,8 +722,14 @@ async function renderEditor(app, noteId) {
     try {
         const endpoint = noteId ? `/notes/${noteId}` : '/notes';
         const method = noteId ? 'PUT' : 'POST';
-
-        const data = await apiCall(endpoint, method, formData);
+        
+        let res = await fetch(`${API_URL}${endpoint}`, {
+            method,
+            headers: { 'x-auth-token': state.token },
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.msg || 'Save failed');
         
         showToast('Note saved successfully');
         if (!noteId) window.location.hash = `#/note/${data._id}`;

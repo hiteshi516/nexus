@@ -9,21 +9,6 @@ const User = require('../models/User');
 const googleClient = new OAuth2Client();
 const otpLifetimeMs = 10 * 60 * 1000;
 
-function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
-}
-
-function getGoogleAudienceList() {
-  const audiences = [];
-  if (process.env.GOOGLE_CLIENT_IDS) {
-    audiences.push(...process.env.GOOGLE_CLIENT_IDS.split(',').map((id) => id.trim()).filter(Boolean));
-  }
-  if (process.env.GOOGLE_CLIENT_ID) {
-    audiences.push(process.env.GOOGLE_CLIENT_ID.trim());
-  }
-  return [...new Set(audiences)];
-}
-
 function createOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -38,11 +23,6 @@ function getMailTransporter() {
       pass: process.env.SMTP_APP_PASSWORD.trim()
     }
   });
-}
-
-function isEmailVerificationRequired() {
-  if (process.env.REQUIRE_EMAIL_VERIFICATION === 'false') return false;
-  return !!getMailTransporter();
 }
 
 async function sendOtpEmail(email, name, otp) {
@@ -100,12 +80,9 @@ function sendAuthResponse(user, res) {
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
   try {
-    const normalizedEmail = normalizeEmail(email);
     if (!password) return res.status(400).json({ msg: 'Password is required' });
-    if (!normalizedEmail) return res.status(400).json({ msg: 'Email is required' });
-    if (!name || !String(name).trim()) return res.status(400).json({ msg: 'Name is required' });
 
-    let user = await User.findOne({ email: normalizedEmail });
+    let user = await User.findOne({ email });
     if (user && user.isEmailVerified) return res.status(400).json({ msg: 'User already exists' });
 
     const salt = await bcrypt.genSalt(10);
@@ -113,35 +90,22 @@ router.post('/register', async (req, res) => {
 
     if (user && !user.isEmailVerified) {
       user.name = name;
-      user.email = normalizedEmail;
       user.password = hashedPassword;
       user.authProvider = 'local';
-      if (isEmailVerificationRequired()) {
-        await issueVerificationOtp(user);
-        return res.json({ msg: 'Verification OTP sent to your email', requiresOtp: true, email: user.email });
-      }
-      user.isEmailVerified = true;
-      user.emailOtp = null;
-      user.emailOtpExpiresAt = null;
-      await user.save();
-      return sendAuthResponse(user, res);
-    }
-
-    user = new User({
-      name,
-      email: normalizedEmail,
-      password: hashedPassword,
-      authProvider: 'local',
-      isEmailVerified: !isEmailVerificationRequired()
-    });
-
-    if (isEmailVerificationRequired()) {
       await issueVerificationOtp(user);
       return res.json({ msg: 'Verification OTP sent to your email', requiresOtp: true, email: user.email });
     }
 
-    await user.save();
-    sendAuthResponse(user, res);
+    user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      authProvider: 'local',
+      isEmailVerified: false
+    });
+
+    await issueVerificationOtp(user);
+    res.json({ msg: 'Verification OTP sent to your email', requiresOtp: true, email: user.email });
   } catch (err) {
     res.status(500).json({ msg: err.message || 'Server Error' });
   }
@@ -150,8 +114,7 @@ router.post('/register', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   const { email, otp } = req.body;
   try {
-    const normalizedEmail = normalizeEmail(email);
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ msg: 'User not found' });
     if (!user.emailOtp || !user.emailOtpExpiresAt) return res.status(400).json({ msg: 'No active OTP found. Please request a new one.' });
     if (user.emailOtpExpiresAt.getTime() < Date.now()) return res.status(400).json({ msg: 'OTP expired. Please request a new one.' });
@@ -171,12 +134,7 @@ router.post('/verify-otp', async (req, res) => {
 router.post('/resend-otp', async (req, res) => {
   const { email } = req.body;
   try {
-    if (!isEmailVerificationRequired()) {
-      return res.status(400).json({ msg: 'Email verification is currently disabled' });
-    }
-
-    const normalizedEmail = normalizeEmail(email);
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ msg: 'User not found' });
     if (user.isEmailVerified) return res.status(400).json({ msg: 'Email is already verified' });
 
@@ -191,20 +149,13 @@ router.post('/resend-otp', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const normalizedEmail = normalizeEmail(email);
-    let user = await User.findOne({ email: normalizedEmail });
+    let user = await User.findOne({ email });
     if (!user) return res.status(400).json({ msg: 'Invalid Credentials' });
     if (!user.password) {
       return res.status(400).json({ msg: 'This account uses Google sign-in. Please continue with Google.' });
     }
-    if (!user.isEmailVerified && isEmailVerificationRequired()) {
+    if (!user.isEmailVerified) {
       return res.status(400).json({ msg: 'Please verify your email with the OTP sent to your inbox.' });
-    }
-    if (!user.isEmailVerified && !isEmailVerificationRequired()) {
-      user.isEmailVerified = true;
-      user.emailOtp = null;
-      user.emailOtpExpiresAt = null;
-      await user.save();
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -217,15 +168,13 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/google-config', (req, res) => {
-  const [clientId] = getGoogleAudienceList();
-  res.json({ clientId: clientId || '' });
+  res.json({ clientId: process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.trim() : '' });
 });
 
 router.post('/google', async (req, res) => {
   const { credential } = req.body;
 
-  const audiences = getGoogleAudienceList();
-  if (!audiences.length) {
+  if (!process.env.GOOGLE_CLIENT_ID) {
     return res.status(500).json({ msg: 'Google sign-in is not configured' });
   }
 
@@ -236,7 +185,7 @@ router.post('/google', async (req, res) => {
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: credential,
-      audience: audiences
+      audience: process.env.GOOGLE_CLIENT_ID.trim()
     });
 
     const payload = ticket.getPayload();
@@ -244,12 +193,11 @@ router.post('/google', async (req, res) => {
       return res.status(400).json({ msg: 'Unable to verify Google account' });
     }
 
-    const normalizedEmail = normalizeEmail(payload.email);
-    let user = await User.findOne({ email: normalizedEmail });
+    let user = await User.findOne({ email: payload.email });
     if (!user) {
       user = new User({
         name: payload.name || payload.email.split('@')[0],
-        email: normalizedEmail,
+        email: payload.email,
         googleId: payload.sub,
         authProvider: 'google',
         isEmailVerified: true,
