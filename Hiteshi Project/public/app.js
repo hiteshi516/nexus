@@ -140,6 +140,14 @@ async function renderGoogleButton(containerId, mode) {
         const data = await apiCall('/auth/google', 'POST', {
           credential: response.credential
         });
+        
+        if (data.requiresOtp) {
+          showToast(data.msg);
+          setPendingVerificationEmail(data.email);
+          setTimeout(() => window.location.hash = '#/verify-otp', 1500);
+          return;
+        }
+
         persistAuth(data);
         showToast('Signed in with Google');
         googleDebug('renderGoogleButton:signinSuccess', { userId: data && data.user ? data.user.id : null });
@@ -147,6 +155,10 @@ async function renderGoogleButton(containerId, mode) {
       } catch (err) {
         googleDebug('renderGoogleButton:signinError', { message: err.message });
         showToast(err.message, true);
+        if (err.message.includes('verify your email')) {
+          setPendingVerificationEmail(err.email || ''); // Best effort if email isn't in err
+          setTimeout(() => window.location.hash = '#/verify-otp', 1500);
+        }
       }
     }
   });
