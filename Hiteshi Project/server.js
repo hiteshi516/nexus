@@ -26,14 +26,12 @@ if (!mongoUri) {
   process.exit(1);
 }
 
-let isConnected = false;
 const connectDB = async () => {
-  if (isConnected) return;
+  if (mongoose.connection.readyState === 1) return;
   try {
-    const db = await mongoose.connect(mongoUri, {
+    await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 5000,
     });
-    isConnected = db.connections[0].readyState;
     console.log('MongoDB Connected (Serverless)');
   } catch (err) {
     console.error('MongoDB connection failed:', err.message || err);
