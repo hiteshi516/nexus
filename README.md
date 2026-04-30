@@ -103,7 +103,4 @@ The server will typically start on `http://localhost:5000`. You can then open yo
 ---
 
 ## 🌐 Live Demo
-Deployed on Vercel. *(Add your Vercel project link here once generated)*
-
----
-*Built with ❤️ for better research and knowledge management.*
+nexus-research-hub.vercel.app
