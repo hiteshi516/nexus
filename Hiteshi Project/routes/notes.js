@@ -7,19 +7,15 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    const dir = './uploads/';
-    if (!fs.existsSync(dir)){
-        fs.mkdirSync(dir);
-    }
-    cb(null, dir);
-  },
-  filename: function(req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+const mongoose = require('mongoose');
+const { GridFSBucket } = require('mongodb');
+
+// Use memory storage for Vercel, limiting file size to ~4MB to avoid serverless payload limits
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 4 * 1024 * 1024 } // 4MB limit
 });
-const upload = multer({ storage: storage });
 
 router.get('/', auth, async (req, res) => {
   try {
@@ -43,11 +39,28 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', [auth, upload.array('attachments', 10)], async (req, res) => {
   const { title, content, topic, isPublic } = req.body;
   try {
-    const attachments = req.files ? req.files.map(file => ({
-      filename: file.originalname,
-      path: file.filename,
-      mimetype: file.mimetype
-    })) : [];
+    let attachments = [];
+    if (req.files && req.files.length > 0) {
+      const db = mongoose.connection.db;
+      const bucket = new GridFSBucket(db, { bucketName: 'attachments' });
+      
+      for (const file of req.files) {
+        const filename = Date.now() + '-' + file.originalname;
+        const uploadStream = bucket.openUploadStream(filename, { contentType: file.mimetype });
+        
+        uploadStream.end(file.buffer);
+        await new Promise((resolve, reject) => {
+          uploadStream.on('finish', resolve);
+          uploadStream.on('error', reject);
+        });
+
+        attachments.push({
+          filename: file.originalname,
+          path: uploadStream.id.toString(), // We store the GridFS file ID as the path
+          mimetype: file.mimetype
+        });
+      }
+    }
 
     const newNote = new Note({
       title,
@@ -94,11 +107,26 @@ router.put('/:id', [auth, upload.array('attachments', 10)], async (req, res) => 
     note.currentVersion += 1;
 
     if (req.files && req.files.length > 0) {
-      const newAttachments = req.files.map(file => ({
-        filename: file.originalname,
-        path: file.filename,
-        mimetype: file.mimetype
-      }));
+      const db = mongoose.connection.db;
+      const bucket = new GridFSBucket(db, { bucketName: 'attachments' });
+      const newAttachments = [];
+      
+      for (const file of req.files) {
+        const filename = Date.now() + '-' + file.originalname;
+        const uploadStream = bucket.openUploadStream(filename, { contentType: file.mimetype });
+        
+        uploadStream.end(file.buffer);
+        await new Promise((resolve, reject) => {
+          uploadStream.on('finish', resolve);
+          uploadStream.on('error', reject);
+        });
+
+        newAttachments.push({
+          filename: file.originalname,
+          path: uploadStream.id.toString(),
+          mimetype: file.mimetype
+        });
+      }
       note.attachments = [...note.attachments, ...newAttachments];
     }
 

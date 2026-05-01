@@ -671,7 +671,7 @@ async function renderEditor(app, noteId) {
         <div style="margin-top: 32px;">
             <h3>Attachments</h3>
             <ul style="list-style: none; margin-top: 12px; margin-bottom: 12px;">
-                ${note.attachments ? note.attachments.map(a => `<li><a href="/uploads/${a.path}" target="_blank" style="color: var(--secondary);"><i class="fa-solid fa-paperclip"></i> ${a.filename}</a></li>`).join('') : 'No attachments'}
+                ${note.attachments ? note.attachments.map(a => `<li><a href="/api/uploads/${a.path}" target="_blank" style="color: var(--secondary);"><i class="fa-solid fa-paperclip"></i> ${a.filename}</a></li>`).join('') : 'No attachments'}
             </ul>
             ${isOwner ? `<input type="file" id="note-attachments" multiple class="input-field" style="margin-top: 8px;">` : ''}
         </div>

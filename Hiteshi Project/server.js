@@ -16,9 +16,44 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-// Serve static files from public
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Serve uploaded files from MongoDB GridFS
+app.get('/api/uploads/:id', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { GridFSBucket, ObjectId } = require('mongodb');
+    
+    if (!mongoose.connection || !mongoose.connection.db) {
+       return res.status(500).json({ msg: 'Database not connected' });
+    }
+    
+    const db = mongoose.connection.db;
+    const bucket = new GridFSBucket(db, { bucketName: 'attachments' });
+    
+    let fileId;
+    try {
+      fileId = new ObjectId(req.params.id);
+    } catch (e) {
+      // If the ID is not an ObjectId, it might be an old file, return 404
+      return res.status(404).json({ msg: 'Invalid file ID or file not found' });
+    }
+
+    const files = await bucket.find({ _id: fileId }).toArray();
+    if (!files || files.length === 0) {
+      return res.status(404).json({ msg: 'File not found' });
+    }
+    
+    res.set('Content-Type', files[0].contentType);
+    res.set('Content-Disposition', `inline; filename="${files[0].filename}"`);
+    
+    const downloadStream = bucket.openDownloadStream(fileId);
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ msg: 'Error downloading file' });
+  }
+});
 
 const mongoUri = process.env.MONGO_URI;
 if (!mongoUri) {
